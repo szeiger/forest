@@ -9,10 +9,10 @@ object MutableBTree {
 
   @inline def debug(s: => String): Unit = println(s)
 
-  class Tree[K, V] {
+  final class Tree[K, V] {
     //debug("new Tree")
     var size = 0
-    var root: Node = new Node
+    var root: Node = new Node(null)
 
     def toDebugString(prefix: String = "", indent: String = ""): String = {
       val b = new StringBuffer
@@ -35,13 +35,21 @@ object MutableBTree {
     def empty[K, V]: Tree[K, V] = new Tree
   }
 
-  class Node {
+  final class Node(val children: Array[Node]) {
     var width = 0 // number of keys
-    val keys = new Array[AnyRef](ORDER-1)
-    val values = new Array[AnyRef](ORDER-1)
-    var children: Array[Node] = null
+    val kv = new Array[AnyRef](2* (ORDER-1))
 
-    def initChildren(): Unit = children = new Array[Node](ORDER)
+    @inline def getKey[K](i: Int): K = kv(2*i).asInstanceOf[K]
+    @inline def getValue[V](i: Int): V = kv(2*i + 1).asInstanceOf[V]
+    @inline def setKV[K, V](i: Int, k: K, v: V): Unit = {
+      val pos = 2*i
+      kv(pos) = k.asInstanceOf[AnyRef]
+      kv(pos+1) = v.asInstanceOf[AnyRef]
+    }
+    //@inline def setKey[K](i: Int, k: K): Unit = kv(2*i) = k.asInstanceOf[AnyRef]
+    @inline def setValue[V](i: Int, v: V): Unit = kv(2*i + 1) = v.asInstanceOf[AnyRef]
+    @inline def keysIt: Iterator[AnyRef] = kv.iterator.zipWithIndex.filter(_._2 % 2 == 0).map(_._1)
+    @inline def valuesIt: Iterator[AnyRef] = kv.iterator.zipWithIndex.filter(_._2 % 2 == 1).map(_._1)
 
     def toDebugString(prefix: String = "", indent: String = ""): String = {
       val b = new StringBuffer
@@ -52,17 +60,17 @@ object MutableBTree {
     def debugString(b: StringBuffer, prefix: String = "", indent: String = ""): Unit = {
       b.append(indent + prefix + s"Node(width=$width) @ ${System.identityHashCode(this)}\n")
       if(width == ORDER-1) {
-        b.append(indent + "  keys = [" + keys.iterator.mkString(", ") + "]\n")
-        b.append(indent + "  values = [" + values.iterator.mkString(", ") + "]\n")
+        b.append(indent + "  keys = [" + keysIt.mkString(", ") + "]\n")
+        b.append(indent + "  values = [" + valuesIt.mkString(", ") + "]\n")
       } else {
-        if(keys.iterator.drop(width).forall(_ == null))
-          b.append(indent + "  keys = [" + keys.iterator.take(width).mkString(", ") + ", ...]\n")
+        if(keysIt.drop(width).forall(_ == null))
+          b.append(indent + "  keys = [" + keysIt.take(width).mkString(", ") + ", ...]\n")
         else
-          b.append(indent + "  keys = [" + keys.mkString(", ") + "] !!!\n")
-        if(values.iterator.drop(width).forall(_ == null))
-          b.append(indent + "  values = [" + values.iterator.take(width).mkString(", ") + ", ...]\n")
+          b.append(indent + "  keys = [" + keysIt.mkString(", ") + "] !!!\n")
+        if(valuesIt.drop(width).forall(_ == null))
+          b.append(indent + "  values = [" + valuesIt.take(width).mkString(", ") + ", ...]\n")
         else
-          b.append(indent + "  values = [" + values.mkString(", ") + "] !!!\n")
+          b.append(indent + "  values = [" + valuesIt.mkString(", ") + "] !!!\n")
       }
       if(children != null) {
         children.zipWithIndex.foreach { case (ch, i) =>
@@ -79,14 +87,14 @@ object MutableBTree {
     override def toString = {
       def simpleStr(n: Node): String = n match {
         case null => "_"
-        case _ => s"{" + n.keys.take(n.width).mkString(",") + "}"
+        case _ => s"{" + n.keysIt.take(n.width).mkString(",") + "}"
       }
       val b = new StringBuffer().append('[')
       if(children != null)
         b.append(simpleStr(children(0))).append(", ")
       for(i <- 0 until width) {
         if(i != 0) b.append(", ")
-        b.append(keys(i))
+        b.append(getKey[AnyRef](i))
         if(children != null)
           b.append(" \\ ").append(simpleStr(children(i+1)))
       }
@@ -97,8 +105,8 @@ object MutableBTree {
     def validate(level: Int): (Int, Int) = { // returns (child levels, total size)
       assert(width < ORDER, s"width ($width) should be < $ORDER")
       assert(level == 0 || width >= (ORDER-1)/2, s"width ($width) should be >= ${(ORDER-1)/2} in non-root nodes")
-      assert(keys.iterator.drop(width).forall(_ == null), s"keys after widht ($width) must be null")
-      assert(values.iterator.drop(width).forall(_ == null), s"values after width ($width) must be null")
+      assert(keysIt.drop(width).forall(_ == null), s"keys after widht ($width) must be null")
+      assert(valuesIt.drop(width).forall(_ == null), s"values after width ($width) must be null")
       var sum = width
       if(children != null) {
         assert(children.iterator.take(width+1).forall(_ != null), s"the first width ($width) + 1 children must be non-null")
@@ -120,12 +128,19 @@ object MutableBTree {
 
   def foreach[K, V, U](n: Node, f: ((K, V)) => U): Unit = {
     var i = 0
-    while(i < n.width) {
-      if(n.children != null) foreach(n.children(i), f)
-      f((n.keys(i).asInstanceOf[K], n.values(i).asInstanceOf[V]))
-      i += 1
+    if(n.children == null) {
+      while(i < n.width) {
+        f((n.getKey(i).asInstanceOf[K], n.getValue(i).asInstanceOf[V]))
+        i += 1
+      }
+    } else {
+      while(i < n.width) {
+        foreach(n.children(i), f)
+        f((n.getKey(i).asInstanceOf[K], n.getValue(i).asInstanceOf[V]))
+        i += 1
+      }
+      foreach(n.children(i), f)
     }
-    if(n.children != null) foreach(n.children(i), f)
   }
 
   def from[K, V](xs: Iterator[(K, V)])(implicit ord: Ordering[K]): Tree[K, V] = {
@@ -164,79 +179,104 @@ object MutableBTree {
   // 0 or positive: key found, negative: -1 - child slot
   def findIn[K](n: Node, k: K)(implicit ord: Ordering[K]): Int = {
     //debug(s"findIn $n, $k")
-    @tailrec def findInRange(lo: Int, hi: Int): Int = {
-      val count = hi-lo
-      val pivot = lo + count/2
-      //debug(s"  findInRange [$lo, $hi[, count=$count, pivot=$pivot")
-      val cmp = ord.compare(k, n.keys(pivot).asInstanceOf[K])
-      if(cmp == 0) pivot
-      //else if(count == 1)
+    var lo = 0
+    var hi = n.width-1
+    while(true) {
+      val pivot = (lo + hi)/2
+      val cmp = ord.compare(k, n.getKey(pivot))
+      if(cmp == 0) return pivot
       else if(cmp < 0) {
-        if(pivot-lo < 1) -1-pivot
-        else findInRange(lo, pivot)
+        if(pivot == lo) return -1-pivot
+        else hi = pivot-1
       } else {
-        if(hi-pivot < 2) -2-pivot
-        else findInRange(pivot+1, hi)
+        if(pivot == hi) return -2-pivot
+        else lo = pivot+1
       }
     }
-    val res = findInRange(0, n.width)
-    //debug(s"  findIn $n, $k: $res")
-    res
+    0 // unreachable
   }
 
   def get[K, V](t: Tree[K, V], k: K)(implicit ord: Ordering[K]): Option[V] = {
+    var n = t.root
+    var lo = 0
+    var hi = n.width-1
+    while(true) {
+      val pivot = (lo + hi)/2
+      val cmp = ord.compare(k, n.getKey[K](pivot))
+      if(cmp == 0) return Some(n.getValue(pivot))
+      else if(cmp < 0) {
+        if(pivot != lo) hi = pivot-1
+        else if(n.children == null) return None
+        else {
+          n = n.children(pivot)
+          lo = 0
+          hi = n.width-1
+        }
+      } else {
+        if(pivot != hi) lo = pivot+1
+        else if(n.children == null) return None
+        else {
+          n = n.children(pivot+1)
+          lo = 0
+          hi = n.width-1
+        }
+      }
+    }
+    null // unreachable
+  }
+
+  /*
+  def get[K, V](t: Tree[K, V], k: K)(implicit ord: Ordering[K]): Option[V] = {
     @tailrec def getIn(n: Node): Option[V] = {
       val i = findIn(n, k)
-      if(i >= 0) Some(n.values(i).asInstanceOf[V])
+      if(i >= 0) Some(n.getValue(i).asInstanceOf[V])
       else if(n.children == null) None
       else getIn(n.children(-1-i))
     }
     getIn(t.root)
   }
+  */
 
   def insert[K, V](t: Tree[K, V], k: K, v: V)(implicit ord: Ordering[K]): Unit = {
     //debug(s"insert $k -> $v")
     def insertBottom(n: Node): (AnyRef, AnyRef, Node) = {
       //debug(s"insertBottom $n")
-      if(n.width == 0) {
-        n.width = 1
-        n.keys(0) = k.asInstanceOf[AnyRef]
-        n.values(0) = v.asInstanceOf[AnyRef]
+      val i = findIn(n, k)
+      if(i >= 0) {
+        n.setValue(i, v)
+        t.size -= 1
         null
       } else {
-        val i = findIn(n, k)
-        if(i >= 0) {
-          n.values(i) = v.asInstanceOf[AnyRef]
-          t.size -= 1
-          null
+        val pos = -1-i
+        if(n.children == null) {
+          insertOrSplitSimple(n, k.asInstanceOf[AnyRef], v.asInstanceOf[AnyRef], pos)
         } else {
-          val pos = -1-i
-          if(n.children == null) {
-            insertOrSplit(n, k.asInstanceOf[AnyRef], v.asInstanceOf[AnyRef], null, pos)
-          } else {
-            val ch = n.children(pos)
-            if(ch != null) {
-              val up = insertBottom(ch)
-              if(up != null) insertOrSplit(n, up._1, up._2, up._3, pos)
-              else null
-            } else insertOrSplit(n, k.asInstanceOf[AnyRef], v.asInstanceOf[AnyRef], null, pos)
-          }
+          val ch = n.children(pos)
+          if(ch != null) {
+            val up = insertBottom(ch)
+            if(up != null) insertOrSplitWithChildren(n, up._1, up._2, up._3, pos)
+            else null
+          } else insertOrSplitSimple(n, k.asInstanceOf[AnyRef], v.asInstanceOf[AnyRef], pos)
         }
       }
     }
-    t.size += 1
-    val up = insertBottom(t.root)
-    if(up != null) t.root = newRoot(t.root, up._1, up._2, up._3)
+    if(t.size == 0) {
+      t.root.width = 1
+      t.root.setKV(0, k, v)
+      t.size = 1
+    } else {
+      t.size += 1
+      val up = insertBottom(t.root)
+      if(up != null) t.root = newRoot(t.root, up._1, up._2, up._3)
+    }
   }
 
   /** Create a new root from a split root plus new k/v pair */
-  private[forest] def newRoot(left: Node, k: AnyRef, v: AnyRef, right: Node): Node = {
+  @inline private[forest] def newRoot(left: Node, k: AnyRef, v: AnyRef, right: Node): Node = {
     //debug(s"  newRoot $left / ($k -> $v) \\ $right")
-    val r = new Node
-    r.initChildren()
+    val r = new Node(new Array(ORDER))
     r.width = 1
-    r.keys(0) = k
-    r.values(0) = v
+    r.setKV(0, k, v)
     r.children(0) = left
     r.children(1) = right
     //debug(s"    newRoot: $r")
@@ -244,108 +284,124 @@ object MutableBTree {
     r
   }
 
-  /** If the node has room, insert k/v at pos, ch at pos+1 (if not null) and return null,
+  /** If the node has room, insert k/v at pos and return null,
    * otherwise split first and return the new parent k/v and Node to the right */
-  private[forest] def insertOrSplit(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): (AnyRef, AnyRef, Node) = {
-    //debug(s"insertOrSplit $n, $k -> $v, ch=$ch, pos=$pos")
+  private[forest] def insertOrSplitSimple(n: Node, k: AnyRef, v: AnyRef, pos: Int): (AnyRef, AnyRef, Node) = {
     if(n.width < ORDER-1) {
-      insertHere(n, k, v, ch, pos)
+      insertHereSimple(n, k, v, pos)
       null
-    } else splitAndInsert(n, k, v, ch, pos)
+    } else splitAndInsertSimple(n, k, v, pos)
   }
 
-  /** Insert k/v at pos, ch at pos+1 (if not null) */
-  private[forest] def insertHere(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): Unit = {
-    //debug(s"  insertHere $n, ($k -> $v) \\ $ch, pos=$pos")
-    if(pos < n.width) {
-      System.arraycopy(n.keys, pos, n.keys, pos+1, n.width-pos)
-      System.arraycopy(n.values, pos, n.values, pos+1, n.width-pos)
-    }
-    n.keys(pos) = k.asInstanceOf[AnyRef]
-    n.values(pos) = v.asInstanceOf[AnyRef]
-    if(n.children != null) {
-      System.arraycopy(n.children, pos+1, n.children, pos+2, n.width-pos)
-      n.children(pos+1) = ch
-    }
+  /** If the node has room, insert k/v at pos, ch at pos+1 and return null,
+   * otherwise split first and return the new parent k/v and Node to the right */
+  private[forest] def insertOrSplitWithChildren(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): (AnyRef, AnyRef, Node) = {
+    //debug(s"insertOrSplit $n, $k -> $v, ch=$ch, pos=$pos")
+    if(n.width < ORDER-1) {
+      insertHereWithChildren(n, k, v, ch, pos)
+      null
+    } else splitAndInsertWithChildren(n, k, v, ch, pos)
+  }
+
+  /** Insert k/v at pos */
+  @inline private[forest] def insertHereSimple(n: Node, k: AnyRef, v: AnyRef, pos: Int): Unit = {
+    val pos2 = pos*2
+    val nw = n.width
+    if(pos < n.width)
+      System.arraycopy(n.kv, pos2, n.kv, pos2+2, 2*nw - pos2)
+    n.kv(pos2) = k
+    n.kv(pos2+1) = v
     n.width += 1
   }
 
-  /** Split n, insert k/v at pos, ch at pos+1 (if not null),
-   *  and return the new parent k/v and Node to the right */
-  private[forest] def splitAndInsert(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): (AnyRef, AnyRef, Node) = {
-    //debug(s"  splitAndInsert $n, $k -> $v \\ $ch, pos=$pos")
-    //TODO copy children
+
+  /** Insert k/v at pos, ch at pos+1 (if not null) */
+  @inline private[forest] def insertHereWithChildren(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): Unit = {
+    //debug(s"  insertHere $n, ($k -> $v) \\ $ch, pos=$pos")
+    val pos2 = pos*2
+    val nw = n.width
+    if(pos < n.width)
+      System.arraycopy(n.kv, pos2, n.kv, pos2+2, 2*nw - pos2)
+    n.kv(pos2) = k
+    n.kv(pos2+1) = v
+    System.arraycopy(n.children, pos+1, n.children, pos+2, nw-pos)
+    n.children(pos+1) = ch
+    n.width += 1
+  }
+
+  /** Split n, insert k/v at pos, and return the new parent k/v and Node to the right */
+  @inline private[forest] def splitAndInsertSimple(n: Node, k: AnyRef, v: AnyRef, pos: Int): (AnyRef, AnyRef, Node) = {
     val total = n.width+1
     val pivot = total/2
-    val right = new Node
-    if(n.children != null) right.initChildren()
+    val right = new Node(null)
+    val rest = total-pivot-1
     n.width = pivot
-    right.width = total-pivot-1
+    right.width = rest
+    var ret: (AnyRef, AnyRef, Node) = null
     if(pos < pivot) {
-      val ret = (n.keys(pivot-1), n.values(pivot-1), right)
-      // Right:
-      // [ pivot, ORDER [
-      System.arraycopy(n.keys, pivot, right.keys, 0, right.width)
-      System.arraycopy(n.values, pivot, right.values, 0, right.width)
-      // Left:
-      // [ 0, pos [
-      // k/v
-      // [ pos, pivot-1 [
-      System.arraycopy(n.keys, pos, n.keys, pos+1, pivot-1-pos)
-      System.arraycopy(n.values, pos, n.values, pos+1, pivot-1-pos)
-      Arrays.fill(n.keys, pivot, n.keys.length, null)
-      Arrays.fill(n.values, pivot, n.values.length, null)
-      n.keys(pos) = k
-      n.values(pos) = v
-      if(n.children != null) {
-        System.arraycopy(n.children, pivot, right.children, 0, right.width+1)
-        System.arraycopy(n.children, pos+1, n.children, pos+2, pivot-1-pos)
-        Arrays.fill(n.children.asInstanceOf[Array[AnyRef]], pivot+1, n.children.length, null)
-        n.children(pos+1) = ch
-      }
-      //debug(s"    splitAndInsert LEFT total=$total, pivot=$pivot: $n / (${ret._1} -> ${ret._2}) \\ ${ret._3}")
-      ret
+      ret = (n.getKey(pivot-1), n.getValue(pivot-1), right)
+      if(rest > 0)
+        System.arraycopy(n.kv, 2*pivot, right.kv, 0, 2*rest)
+      if(pivot-1-pos > 0)
+        System.arraycopy(n.kv, 2*pos, n.kv, 2*(pos+1), 2*(pivot-1-pos))
+      n.setKV(pos, k, v)
     } else if(pos == pivot) {
-      val ret = (k, v, right)
-      // Right:
-      // [ pivot, ORDER [
-      System.arraycopy(n.keys, pivot, right.keys, 0, total-pivot-1)
-      System.arraycopy(n.values, pivot, right.values, 0, total-pivot-1)
-      // Left:
-      // [ 0, pivot [
-      Arrays.fill(n.keys, pivot, n.keys.length, null)
-      Arrays.fill(n.values, pivot, n.values.length, null)
-      if(n.children != null) {
-        System.arraycopy(n.children, pivot+1, right.children, 1, total-pivot-1)
-        right.children(0) = ch
-        Arrays.fill(n.children.asInstanceOf[Array[AnyRef]], pivot+1, n.children.length, null)
-      }
-      //debug(s"    splitAndInsert CENTER total=$total, pivot=$pivot: $n / (${ret._1} -> ${ret._2}) \\ ${ret._3}")
-      ret
+      ret = (k, v, right)
+      System.arraycopy(n.kv, 2*pivot, right.kv, 0, 2*rest)
     } else {
-      val ret = (n.keys(pivot), n.values(pivot), right)
-      // Right:
-      // [ pivot, pos [
-      // k/v
-      // [ pos, ORDER [
-      System.arraycopy(n.keys, pivot+1, right.keys, 0, pos-pivot-1)
-      System.arraycopy(n.values, pivot+1, right.values, 0, pos-pivot-1)
-      System.arraycopy(n.keys, pos, right.keys, pos-pivot, total-1-pos)
-      System.arraycopy(n.values, pos, right.values, pos-pivot, total-1-pos)
-      right.keys(pos-pivot-1) = k
-      right.values(pos-pivot-1) = v
-      // Left:
-      // [ 0, pivot [
-      Arrays.fill(n.keys, n.width, n.keys.length, null)
-      Arrays.fill(n.values, n.width, n.values.length, null)
-      if(n.children != null) {
-        System.arraycopy(n.children, pivot+1, right.children, 0, pos-pivot)
-        System.arraycopy(n.children, pos+1, right.children, pos-pivot+1, total-1-pos)
-        right.children(pos-pivot) = ch
-        Arrays.fill(n.children.asInstanceOf[Array[AnyRef]], n.width+1, n.children.length, null)
-      }
-      //debug(s"    splitAndInsert RIGHT total=$total, pivot=$pivot: $n / (${ret._1} -> ${ret._2}) \\ ${ret._3}")
-      ret
+      ret = (n.getKey(pivot), n.getValue(pivot), right)
+      if(pos-pivot-1 > 0)
+        System.arraycopy(n.kv, 2*(pivot+1), right.kv, 0, 2*(pos-pivot-1))
+      if(total-1-pos > 0)
+        System.arraycopy(n.kv, 2*pos, right.kv, 2*(pos-pivot), 2*(total-1-pos))
+      right.setKV(pos-pivot-1, k, v)
     }
+    Arrays.fill(n.kv, 2*pivot, 2*(ORDER-1), null)
+    ret
+  }
+
+  /** Split n, insert k/v at pos, ch at pos+1,
+   *  and return the new parent k/v and Node to the right */
+  @inline private[forest] def splitAndInsertWithChildren(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int): (AnyRef, AnyRef, Node) = {
+    //debug(s"  splitAndInsert $n, $k -> $v \\ $ch, pos=$pos")
+    val total = n.width+1
+    val pivot = total/2
+    val right = new Node(new Array(ORDER))
+    val rest = total-pivot-1
+    n.width = pivot
+    right.width = rest
+    var ret: (AnyRef, AnyRef, Node) = null
+
+    if(pos < pivot) {
+      ret = (n.getKey(pivot-1), n.getValue(pivot-1), right)
+      if(rest > 0)
+        System.arraycopy(n.kv, 2*pivot, right.kv, 0, 2*rest)
+      if(pivot-1-pos > 0)
+        System.arraycopy(n.kv, 2*pos, n.kv, 2*(pos+1), 2*(pivot-1-pos))
+      n.setKV(pos, k, v)
+      System.arraycopy(n.children, pivot, right.children, 0, rest+1)
+      System.arraycopy(n.children, pos+1, n.children, pos+2, pivot-1-pos)
+      n.children(pos+1) = ch
+    } else if(pos == pivot) {
+      ret = (k, v, right)
+      System.arraycopy(n.kv, 2*pivot, right.kv, 0, 2*rest)
+      System.arraycopy(n.children, pivot+1, right.children, 1, rest)
+      right.children(0) = ch
+    } else {
+      ret = (n.getKey(pivot), n.getValue(pivot), right)
+      if(pos-pivot-1 > 0)
+        System.arraycopy(n.kv, 2*(pivot+1), right.kv, 0, 2*(pos-pivot-1))
+      if(total-1-pos > 0)
+        System.arraycopy(n.kv, 2*pos, right.kv, 2*(pos-pivot), 2*(total-1-pos))
+      right.setKV(pos-pivot-1, k, v)
+      System.arraycopy(n.children, pivot+1, right.children, 0, pos-pivot)
+      System.arraycopy(n.children, pos+1, right.children, pos-pivot+1, total-1-pos)
+      right.children(pos-pivot) = ch
+    }
+    Arrays.fill(n.kv, 2*pivot, 2*(ORDER-1), null)
+    Arrays.fill(n.children.asInstanceOf[Array[AnyRef]], pivot+1, ORDER, null)
+
+    //debug(s"    splitAndInsert total=$total, pos=$pos, pivot=$pivot: $n / (${ret._1} -> ${ret._2}) \\ ${ret._3}")
+    ret
   }
 }
