@@ -1,4 +1,4 @@
-package forest
+package forest.mutable
 
 import java.util.concurrent.TimeUnit
 
@@ -14,7 +14,7 @@ import scala.util.Random
 @Measurement(iterations = 10)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @State(Scope.Benchmark)
-class MutableBTreeBenchmark {
+class SimpleBTreeBenchmark {
 
   //@Param(Array("0", "1", "10", "100", "1000", "10000"))
   @Param(Array("10", "100", "1000"))
@@ -22,12 +22,12 @@ class MutableBTreeBenchmark {
 
   var nums: Range = _
   val rnd = new Random(0)
-  var t1: MutableBTree.Tree[Int, Int] = _
+  var t1: SimpleBTree.Tree[Int, Int] = _
   var perm: Array[Int] = _ // repeatably pseudo-random permutation
 
   @Setup(Level.Trial) def init: Unit = {
     nums = 1 to size
-    t1 = MutableBTree.from(nums.iterator.map(x => (x, x+1)))
+    t1 = SimpleBTree.from(nums.iterator.map(x => (x, x+1)))
     perm = new Array[Int](size)
     val rem = scala.collection.mutable.ArrayBuffer.from(nums)
     perm = Array.fill(size)(rem.remove(rnd.nextInt(rem.size)))
@@ -37,25 +37,25 @@ class MutableBTreeBenchmark {
 
   @Benchmark
   def buildRandom(bh: Blackhole): Unit = {
-    val t: MutableBTree.Tree[Int, Int] = MutableBTree.Tree.empty
+    val t: SimpleBTree.Tree[Int, Int] = SimpleBTree.Tree.empty
     val i = nums.iterator
     while (i.hasNext) {
       val x = i.next()
-      MutableBTree.insert(t, x, x+1)
+      SimpleBTree.insert(t, x, x+1)
     }
     bh.consume(t)
   }
 
   @Benchmark
   def foreach(bh: Blackhole): Unit = {
-    MutableBTree.foreach(t1, ((kv: (Int, Int)) => bh.consume(kv)))
+    SimpleBTree.foreach(t1, ((kv: (Int, Int)) => bh.consume(kv)))
   }
 
   @Benchmark
   def lookup(bh: Blackhole): Unit = {
     var i = 0
     while(i < perm.length) {
-      bh.consume(MutableBTree.get(t1, perm(i)))
+      bh.consume(SimpleBTree.get(t1, perm(i)))
       i += 1
     }
   }

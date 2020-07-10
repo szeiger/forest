@@ -1,4 +1,4 @@
-scalaVersion in Global := "2.13.1"
+scalaVersion in Global := "2.13.3"
 
 cancelable in Global := true
 

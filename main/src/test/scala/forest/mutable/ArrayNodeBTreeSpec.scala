@@ -1,12 +1,12 @@
-package forest
+package forest.mutable
 
+import forest.mutable.ArrayNodeBTree._
 import hedgehog._
 import hedgehog.runner._
-import MutableBTree._
 
 import scala.collection.mutable.{ArrayBuffer, TreeMap}
 
-object MutableBTreeSpec extends Properties {
+object ArrayNodeBTreeSpec extends Properties {
 
   override def tests: List[Test] =
     List(
@@ -46,7 +46,7 @@ object MutableBTreeSpec extends Properties {
       val t = Tree.empty[Int, Int]
       m1.foreach { case (k, v) => insert(t, k, v) }
       Result.all(m1.iterator.map { case (k, v) =>
-        MutableBTree.get(t, k) ==== Some(v)
+        ArrayNodeBTree.get(t, k) ==== Some(v)
       }.toList)
     }
 
@@ -57,7 +57,7 @@ object MutableBTreeSpec extends Properties {
       val t = Tree.empty[Int, Int]
       m1.foreach { case (k, v) => insert(t, k, v) }
       Result.all(m1.iterator.map { case (k, v) =>
-        MutableBTree.get(t, k+1) ==== None
+        ArrayNodeBTree.get(t, k+1) ==== None
       }.toList)
     }
 
@@ -70,7 +70,7 @@ object MutableBTreeSpec extends Properties {
       m
     }
 
-  def validateTree[K, V](t: Tree[K, V]): Result =
+  def validateTree[K : Ordering, V](t: Tree[K, V]): Result =
     try {
       t.validate()
       Result.success
@@ -82,7 +82,7 @@ object MutableBTreeSpec extends Properties {
 
   def toColl[K, V](t: Tree[K, V]): Iterable[(K, V)] = {
     val buf = new ArrayBuffer[(K, V)]()
-    foreach(t, (kv: (K, V)) => buf += kv)
+    t.foreach((kv: (K, V)) => buf += kv)
     buf
   }
 }

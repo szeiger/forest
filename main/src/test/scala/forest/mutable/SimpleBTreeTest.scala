@@ -1,15 +1,15 @@
-package forest
+package forest.mutable
 
+import forest.mutable.SimpleBTree._
 import org.junit.Assert._
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
-import org.junit.Test
-import MutableBTree._
 
 import scala.collection.mutable.ArrayBuffer
 
 @RunWith(classOf[JUnit4])
-class MutableBTreeTest {
+class SimpleBTreeTest {
 
   @Test
   def insertLevel1a: Unit = {

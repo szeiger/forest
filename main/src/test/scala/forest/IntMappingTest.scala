@@ -1,6 +1,5 @@
 package forest
 
-import forest.MutableBTree._
 import org.junit.Assert._
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +29,20 @@ class IntMappingTest {
       a(i) = 0
       b = IntMapping.set(b, i, 0)
       check()
+    }
+  }
+
+  @Test
+  def testInsert: Unit = {
+    val im = (0 to 14).foldLeft(0L) { (im, idx) => IntMapping.insert(im, idx, 15-idx) }
+    val ab = new ArrayBuffer[Int]()
+    (0 to 14).foreach { idx => ab.addOne(15-idx) }
+    assertEquals(ab, IntMapping.toArraySeq(im, 15))
+    for(idx <- 0 to 14) {
+      //println(s"--- idx: $idx")
+      val ab2 = ab.clone()
+      ab2.insert(idx, 11)
+      assertEquals(ab2, IntMapping.toArraySeq(IntMapping.insert(im, idx, 11), 16))
     }
   }
 }

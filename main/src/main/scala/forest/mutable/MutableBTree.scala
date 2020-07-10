@@ -1,8 +1,6 @@
-package forest
+package forest.mutable
 
 import java.util.Arrays
-
-import scala.annotation.tailrec
 
 object MutableBTree {
   val ORDER = 16 // maximum number of children per node
