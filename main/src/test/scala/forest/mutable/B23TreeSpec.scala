@@ -24,7 +24,7 @@ object B23TreeSpec extends Properties {
     } yield {
       val exp = l1.sorted.distinct.map(i => (i, i))
       val t = Tree.empty[Int, Int]
-      l1.foreach(i => insert(t, i, i))
+      l1.foreach(i => t.insert(i, i))
       Result.all(List(
         validateTree(t),
         toColl(t) ==== exp,
@@ -44,9 +44,9 @@ object B23TreeSpec extends Properties {
       m1 <- treeMapGen(0, 1000).forAll
     } yield {
       val t = Tree.empty[Int, Int]
-      m1.foreach { case (k, v) => insert(t, k, v) }
+      m1.foreach { case (k, v) => t.insert(k, v) }
       Result.all(m1.iterator.map { case (k, v) =>
-        B23Tree.get(t, k) ==== Some(v)
+        t.get(k) ==== Some(v)
       }.toList)
     }
 
@@ -55,9 +55,9 @@ object B23TreeSpec extends Properties {
       m1 <- treeMapGen(0, 1000).forAll
     } yield {
       val t = Tree.empty[Int, Int]
-      m1.foreach { case (k, v) => insert(t, k, v) }
+      m1.foreach { case (k, v) => t.insert(k, v) }
       Result.all(m1.iterator.map { case (k, v) =>
-        B23Tree.get(t, k+1) ==== None
+        t.get(k+1) ==== None
       }.toList)
     }
 
@@ -82,7 +82,7 @@ object B23TreeSpec extends Properties {
 
   def toColl[K, V](t: Tree[K, V]): Iterable[(K, V)] = {
     val buf = new ArrayBuffer[(K, V)]()
-    foreach(t, (kv: (K, V)) => buf += kv)
+    t.foreach((kv: (K, V)) => buf += kv)
     buf
   }
 }

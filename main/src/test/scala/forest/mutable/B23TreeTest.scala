@@ -14,65 +14,65 @@ class B23TreeTest {
   @Test
   def insertLevel1a: Unit = {
     val t = Tree.empty[String, Int]
-    insert(t, "a", 1)
-    insert(t, "c", 3)
-    insert(t, "b", 2)
+    t.insert("a", 1)
+    t.insert("c", 3)
+    t.insert("b", 2)
     assertEquals(List("a" -> 1, "b" -> 2, "c" -> 3), toColl(t))
   }
 
   @Test
   def insertLevel1b: Unit = {
     val t = Tree.empty[Int, Int]
-    insert(t, 0, 0)
-    insert(t, 1, 1)
-    insert(t, 0, 0)
+    t.insert(0, 0)
+    t.insert(1, 1)
+    t.insert(0, 0)
     assertEquals(List(0 -> 0, 1 -> 1), toColl(t))
   }
 
   @Test
   def insertLevel2a: Unit = {
     val t = Tree.empty[Int, Int]
-    insert(t, 1, 1)
-    insert(t, 4, 4)
-    insert(t, 0, 0)
-    insert(t, 3, 3)
-    insert(t, 2, 2)
+    t.insert(1, 1)
+    t.insert(4, 4)
+    t.insert(0, 0)
+    t.insert(3, 3)
+    t.insert(2, 2)
     assertEquals(List(0 -> 0, 1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4), toColl(t))
   }
 
   @Test
   def insertLevel2b: Unit = {
     val t = Tree.empty[Int, Int]
-    insert(t, 1, 1)
-    insert(t, 0, 0)
-    insert(t, 2, 2)
-    insert(t, 3, 3)
-    insert(t, 4, 4)
+    t.insert(1, 1)
+    t.insert(0, 0)
+    t.insert(2, 2)
+    t.insert(3, 3)
+    t.insert(4, 4)
     assertEquals(List(0 -> 0, 1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4), toColl(t))
   }
 
   @Test
   def insertLevel2c: Unit = {
     val t = Tree.empty[Int, Int]
-    insert(t, 2, 2)
-    insert(t, 1, 1)
-    insert(t, 4, 4)
-    insert(t, 0, 0)
-    insert(t, 3, 3)
+    t.insert(2, 2)
+    t.insert(1, 1)
+    t.insert(4, 4)
+    t.insert(0, 0)
+    t.insert(3, 3)
     assertEquals(List(0 -> 0, 1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4), toColl(t))
   }
 
   @Test
   def insertLevel2d: Unit = {
     val t = Tree.empty[Int, Int]
-    insert(t, 2, 2)
-    insert(t, 5, 5)
-    insert(t, 6, 6)
-    insert(t, 7, 7)
-    insert(t, 3, 3)
-    insert(t, 0, 0)
-    insert(t, 1, 1)
-    insert(t, 4, 4)
+    t.insert(2, 2)
+    t.insert(5, 5)
+    t.insert(6, 6)
+    t.insert(7, 7)
+    t.insert(3, 3)
+    t.insert(0, 0)
+    t.insert(1, 1)
+    t.insert(4, 4)
     assertEquals(List(0 -> 0, 1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5, 6 -> 6, 7 -> 7), toColl(t))
   }
 
@@ -83,7 +83,7 @@ class B23TreeTest {
     //val exp = l1.sorted.distinct.map(i => (i, i))
     l1.foreach { i =>
       //println(t.toDebugString(s"----- inserting $i into: "))
-      insert(t, i, i)
+      t.insert(i, i)
       validateTree(t)
     }
   }
@@ -95,7 +95,7 @@ class B23TreeTest {
     //val exp = l1.sorted.distinct.map(i => (i, i))
     l1.foreach { i =>
       //println(t.toDebugString(s"----- inserting $i into: "))
-      insert(t, i, i)
+      t.insert(i, i)
       validateTree(t)
     }
   }
@@ -107,7 +107,7 @@ class B23TreeTest {
     //val exp = l1.sorted.distinct.map(i => (i, i))
     l1.foreach { i =>
       //println(t.toDebugString(s"----- inserting $i into: "))
-      insert(t, i, i)
+      t.insert(i, i)
       validateTree(t)
     }
   }
@@ -123,7 +123,7 @@ class B23TreeTest {
 
   def toColl[K, V](t: Tree[K, V]): Iterable[(K, V)] = {
     val buf = new ArrayBuffer[(K, V)]()
-    foreach(t, (kv: (K, V)) => buf += kv)
+    t.foreach((kv: (K, V)) => buf += kv)
     buf
   }
 }

@@ -41,21 +41,21 @@ class B23TreeBenchmark {
     val i = nums.iterator
     while (i.hasNext) {
       val x = i.next()
-      B23Tree.insert(t, x, x+1)
+      t.insert(x, x+1)
     }
     bh.consume(t)
   }
 
   @Benchmark
   def foreach(bh: Blackhole): Unit = {
-    B23Tree.foreach(t1, ((kv: (Int, Int)) => bh.consume(kv)))
+    t1.foreach(((kv: (Int, Int)) => bh.consume(kv)))
   }
 
   @Benchmark
   def lookup(bh: Blackhole): Unit = {
     var i = 0
     while(i < perm.length) {
-      bh.consume(B23Tree.get(t1, perm(i)))
+      bh.consume(t1.get(perm(i)))
       i += 1
     }
   }
