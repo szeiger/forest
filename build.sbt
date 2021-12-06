@@ -1,6 +1,9 @@
-scalaVersion in Global := "2.13.3"
+scalaVersion in Global := "2.13.7"
 
 cancelable in Global := true
+
+javaOptions in Global ++= Seq("--add-modules", "jdk.incubator.vector")
+javacOptions in Global ++= Seq("--add-modules", "jdk.incubator.vector")
 
 val hedgehogVersion = "84f11d82ae95859633927305cbc1e3e27e181225"
 
@@ -23,5 +26,5 @@ lazy val bench = (project in file("bench"))
   .dependsOn(main)
   .enablePlugins(JmhPlugin)
   .settings(
-    scalacOptions ++= Seq("-feature", "-opt:l:inline", "-opt-inline-from:scala.**,forest.**")
+    scalacOptions ++= Seq("-feature", "-opt:l:inline", "-opt-inline-from:scala.**,forest.**"),
   )
