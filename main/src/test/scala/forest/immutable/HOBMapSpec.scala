@@ -25,10 +25,10 @@ object HOBMapSpec extends Properties {
     } yield {
       val exp = l1.sorted.distinct.map(i => (i, i))
       var t = HOBMap.empty[Int, Int]
-      l1.foreach(i => t = t.put(i, i))
+      l1.foreach(i => t += ((i, i)))
       Result.all(List(
         validateTree(t),
-        (t.toBuffer: Iterable[(Int, Int)]) ==== exp,
+        (t.toBuffer: Iterable[(Int, Int)]).toSet ==== exp.toSet,
       ))
     }
 
@@ -45,7 +45,7 @@ object HOBMapSpec extends Properties {
       m1 <- treeMapGen(0, 1000).forAll
     } yield {
       var t = HOBMap.empty[Int, Int]
-      m1.foreach { case (k, v) => t = t.put(k, v) }
+      m1.foreach { case (k, v) => t += ((k, v)) }
       Result.all(m1.iterator.map { case (k, v) =>
         t.get(k) ==== Some(v)
       }.toList)
@@ -56,7 +56,7 @@ object HOBMapSpec extends Properties {
       m1 <- treeMapGen(0, 1000).forAll
     } yield {
       var t = HOBMap.empty[Int, Int]
-      m1.foreach { case (k, v) => t = t.put(k, v) }
+      m1.foreach { case (k, v) => t += ((k, v)) }
       Result.all(m1.iterator.map { case (k, v) =>
         t.get(k+1) ==== None
       }.toList)

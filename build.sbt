@@ -10,6 +10,7 @@ val hedgehogVersion = "84f11d82ae95859633927305cbc1e3e27e181225"
 lazy val main = (project in file("main"))
   .settings(
     scalacOptions ++= Seq("-feature", "-opt:l:inline", "-opt-inline-from:scala.**,forest.**"),
+    javaOptions in Test += "-Xss2M",
     fork in Test := true,
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     libraryDependencies ++= Seq(
