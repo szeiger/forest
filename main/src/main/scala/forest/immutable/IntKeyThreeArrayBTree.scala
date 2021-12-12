@@ -3,12 +3,14 @@ package forest.immutable
 import java.util.Arrays
 import scala.annotation.tailrec
 
-object ThreeArrayBTree {
-  val ORDER = 16 // maximum number of children per node
+object IntKeyThreeArrayBTree {
+  final val ORDER = 17 // maximum number of children per node
+  final val PIVOT = ORDER/2
+  final val REST = ORDER-PIVOT-1
 
   @inline def debug(s: => String): Unit = println(s)
 
-  final class Tree[K, V](val size: Int, val root: Node) {
+  final class Tree[V](val size: Int, val root: Node) {
 
     def toDebugString(prefix: String = "", indent: String = ""): String = {
       val b = new StringBuffer
@@ -28,12 +30,13 @@ object ThreeArrayBTree {
   }
 
   object Tree {
-    private[this] val emptyKVs = new Array[AnyRef](0)
-    private[this] val _empty = new Tree(0, new Node(emptyKVs, emptyKVs))
-    def empty[K, V]: Tree[K, V] = _empty.asInstanceOf[Tree[K, V]]
+    private[this] val emptyKs = new Array[Int](0)
+    private[this] val emptyVs = new Array[AnyRef](0)
+    private[this] val _empty = new Tree(0, new Node(emptyKs, emptyVs))
+    def empty[V]: Tree[V] = _empty.asInstanceOf[Tree[V]]
   }
 
-  sealed class Node(val ks: Array[AnyRef], val vs: Array[AnyRef]) {
+  sealed class Node(val ks: Array[Int], val vs: Array[AnyRef]) {
     @inline def width = ks.length // max ORDER-1
 
     def toDebugString(prefix: String = "", indent: String = ""): String = {
@@ -57,7 +60,7 @@ object ThreeArrayBTree {
     }
   }
 
-  final class ParentNode(val children: Array[Node], __ks: Array[AnyRef], __vs: Array[AnyRef]) extends Node(__ks, __vs) {
+  final class ParentNode(val children: Array[Node], __ks: Array[Int], __vs: Array[AnyRef]) extends Node(__ks, __vs) {
     override def debugString(b: StringBuffer, prefix: String = "", indent: String = ""): Unit = {
       super.debugString(b, prefix, indent)
       children.zipWithIndex.foreach { case (ch, i) =>
@@ -100,7 +103,7 @@ object ThreeArrayBTree {
     }
   }
 
-  @inline def foreach[K, V, U](t: Tree[K, V], f: ((K, V)) => U): Unit =
+  @inline def foreach[K, V, U](t: Tree[V], f: ((K, V)) => U): Unit =
     foreach(t.root, f)
 
   def foreach[K, V, U](n: Node, f: ((K, V)) => U): Unit = {
@@ -121,8 +124,8 @@ object ThreeArrayBTree {
     }
   }
 
-  def from[K, V](xs: Iterator[(K, V)])(implicit ord: Ordering[K]): Tree[K, V] = {
-    var t = Tree.empty[K, V]
+  def from[K, V](xs: Iterator[(Int, V)]): Tree[V] = {
+    var t = Tree.empty[V]
     while(xs.hasNext) {
       val x = xs.next()
       t = insert(t, x._1, x._2)
@@ -131,26 +134,25 @@ object ThreeArrayBTree {
   }
 
   // 0 or positive: key found, negative: -1 - child slot
-  def findIn[K](n: Node, k: K)(implicit ord: Ordering[K]): Int = {
+  @inline def findIn[K](n: Node, k: Int): Int = {
     //debug(s"findIn $n, $k")
     var lo = 0
     var hi = n.width-1
     while(true) {
       val pivot = (lo + hi)/2
-      val cmp = ord.compare(k, n.ks(pivot).asInstanceOf[K])
-      if(cmp == 0) return pivot
-      else if(cmp < 0) {
-        if(pivot == lo) return -1-pivot
-        else hi = pivot-1
-      } else {
+      val cmp = k - n.ks(pivot)
+      if(cmp > 0) {
         if(pivot == hi) return -2-pivot
         else lo = pivot+1
-      }
+      } else if(cmp < 0) {
+        if(pivot == lo) return -1-pivot
+        else hi = pivot-1
+      } else return pivot
     }
     0 // unreachable
   }
 
-  def get[K, V](t: Tree[K, V], k: K)(implicit ord: Ordering[K]): Option[V] = {
+  def get[V](t: Tree[V], k: Int): Option[V] = {
     @tailrec def getIn(n: Node): Option[V] = {
       val i = findIn(n, k)
       if(i >= 0) Some(n.vs(i).asInstanceOf[V])
@@ -164,15 +166,15 @@ object ThreeArrayBTree {
 
   private final class Inserter(
     var left: Node,
-    var k: AnyRef,
+    var k: Int,
     var v: AnyRef,
     var right: Node,
     var increment: Boolean
   )
 
-  private[this] def insertBottom(n: Node, k: AnyRef, v: AnyRef, ord: Ordering[AnyRef], ins: Inserter): Unit = {
+  private[this] def insertBottom(n: Node, k: Int, v: AnyRef, ins: Inserter): Unit = {
     //debug(s"insertBottom $n")
-    val i = findIn(n, k)(ord)
+    val i = findIn(n, k)
     if(i >= 0) {
       ins.left = n match {
         case n: ParentNode => new ParentNode(n.children, n.ks, set(n.vs, i, v))
@@ -184,7 +186,7 @@ object ThreeArrayBTree {
       val pos = -1-i
       n match {
         case n: ParentNode =>
-          insertBottom(n.children(pos), k, v, ord, ins)
+          insertBottom(n.children(pos), k, v, ins)
           val ch2 = ins.left
           val k2 = ins.k
           val v2 = ins.v
@@ -198,14 +200,14 @@ object ThreeArrayBTree {
     }
   }
 
-  def insert[K, V](t: Tree[K, V], k: K, v: V)(implicit ord: Ordering[K]): Tree[K, V] = {
+  def insert[V](t: Tree[V], k: Int, v: V): Tree[V] = {
     //debug(s"insert $k -> $v")
     if(t.size == 0) {
-      val r = new Node(Array[AnyRef](k.asInstanceOf[AnyRef]), Array[AnyRef](v.asInstanceOf[AnyRef]))
+      val r = new Node(Array[Int](k), Array[AnyRef](v.asInstanceOf[AnyRef]))
       new Tree(1, r)
     } else {
-      val ins = new Inserter(null, null, null, null, true)
-      insertBottom(t.root, k.asInstanceOf[AnyRef], v.asInstanceOf[AnyRef], ord.asInstanceOf[Ordering[AnyRef]], ins)
+      val ins = new Inserter(null, 0, null, null, true)
+      insertBottom(t.root, k, v.asInstanceOf[AnyRef], ins)
       val newSize = if(ins.increment) t.size + 1 else t.size
       val root =
         if(ins.right != null) newRoot(ins.left, ins.k, ins.v, ins.right)
@@ -221,10 +223,10 @@ object ThreeArrayBTree {
   }
 
   /** Create a new root from a split root plus new k/v pair */
-  @inline private[forest] def newRoot(left: Node, k: AnyRef, v: AnyRef, right: Node): Node = {
+  @inline private[forest] def newRoot(left: Node, k: Int, v: AnyRef, right: Node): Node = {
     //debug(s"  newRoot $left / ($k -> $v) \\ $right")
     val rchildren = Array[Node](left, right)
-    val rks: Array[AnyRef] = Array[AnyRef](k)
+    val rks: Array[Int] = Array[Int](k)
     val rvs: Array[AnyRef] = Array[AnyRef](v)
     val r = new ParentNode(rchildren, rks, rvs)
     //debug(s"    newRoot: $r")
@@ -234,14 +236,14 @@ object ThreeArrayBTree {
 
   /** If the node has room, insert k/v at pos, ch at pos+1 and return the new node,
    * otherwise split first and return the new node, parent k/v and node to the right */
-  @inline private[forest] def insertOrSplit(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int, update: Node, ins: Inserter): Unit = {
+  @inline private[forest] def insertOrSplit(n: Node, k: Int, v: AnyRef, ch: Node, pos: Int, update: Node, ins: Inserter): Unit = {
     //debug(s"insertOrSplit $n, $k -> $v, ch=$ch, pos=$pos")
     if(n.width < ORDER-1) ins.left = insertHere(n, k, v, ch, pos, update)
     else splitAndInsert(n, k, v, ch, pos, update, ins)
   }
 
   /** Insert k/v at pos, ch at pos+1 (if not null) */
-  private[forest] def insertHere(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int, update: Node): Node = {
+  private[forest] def insertHere(n: Node, k: Int, v: AnyRef, ch: Node, pos: Int, update: Node): Node = {
     //debug(s"  insertHere $n, ($k -> $v) \\ $ch, pos=$pos")
     val nw = n.width
     val ks2 = Arrays.copyOf(n.ks, nw+1)
@@ -266,49 +268,47 @@ object ThreeArrayBTree {
 
   /** Split n, insert k/v at pos, ch at pos+1,
    *  and return the new node, parent k/v and Node to the right */
-  private[forest] def splitAndInsert(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int, update: Node, ins: Inserter): Unit = {
-    val total = n.width+1
-    val pivot = total/2
-    val rest = total-pivot-1
-    if(pos < pivot) {
-      val ksl, vsl = new Array[AnyRef](pivot)
+  private[forest] def splitAndInsert(n: Node, k: Int, v: AnyRef, ch: Node, pos: Int, update: Node, ins: Inserter): Unit = {
+    if(pos < PIVOT) {
+      val ksl = new Array[Int](PIVOT)
+      val vsl = new Array[AnyRef](PIVOT)
       System.arraycopy(n.ks, 0, ksl, 0, pos)
       System.arraycopy(n.vs, 0, vsl, 0, pos)
-      System.arraycopy(n.ks, pos, ksl, pos+1, pivot-pos-1)
-      System.arraycopy(n.vs, pos, vsl, pos+1, pivot-pos-1)
+      System.arraycopy(n.ks, pos, ksl, pos+1, PIVOT-pos-1)
+      System.arraycopy(n.vs, pos, vsl, pos+1, PIVOT-pos-1)
       ksl(pos) = k
       vsl(pos) = v
-      val ksr = Arrays.copyOfRange(n.ks, pivot, n.ks.length)
-      val vsr = Arrays.copyOfRange(n.vs, pivot, n.vs.length)
-      ins.k = n.ks(pivot-1)
-      ins.v = n.vs(pivot-1)
+      val ksr = Arrays.copyOfRange(n.ks, PIVOT, n.ks.length)
+      val vsr = Arrays.copyOfRange(n.vs, PIVOT, n.vs.length)
+      ins.k = n.ks(PIVOT-1)
+      ins.v = n.vs(PIVOT-1)
       n match {
         case n: ParentNode =>
-          val chl = new Array[Node](pivot+1)
+          val chl = new Array[Node](PIVOT+1)
           System.arraycopy(n.children, 0, chl, 0, pos)
           System.arraycopy(n.children, pos+1, chl, pos+2, chl.length-pos-2)
           chl(pos) = update
           chl(pos+1) = ch
-          val chr = Arrays.copyOfRange(n.children, pivot, n.children.length)
+          val chr = Arrays.copyOfRange(n.children, PIVOT, n.children.length)
           ins.left = new ParentNode(chl, ksl, vsl)
           ins.right = new ParentNode(chr, ksr, vsr)
         case n =>
           ins.left = new Node(ksl, vsl)
           ins.right = new Node(ksr, vsr)
       }
-    } else if(pos == pivot) {
-      val ksl = Arrays.copyOf(n.ks, pivot)
-      val vsl = Arrays.copyOf(n.vs, pivot)
-      val ksr = Arrays.copyOfRange(n.ks, pivot, n.ks.length)
-      val vsr = Arrays.copyOfRange(n.vs, pivot, n.vs.length)
+    } else if(pos == PIVOT) {
+      val ksl = Arrays.copyOf(n.ks, PIVOT)
+      val vsl = Arrays.copyOf(n.vs, PIVOT)
+      val ksr = Arrays.copyOfRange(n.ks, PIVOT, n.ks.length)
+      val vsr = Arrays.copyOfRange(n.vs, PIVOT, n.vs.length)
       ins.k = k
       ins.v = v
       n match {
         case n: ParentNode =>
-          val chl = Arrays.copyOf(n.children, pivot+1)
-          chl(pivot) = update
-          val chr = new Array[Node](rest+1)
-          System.arraycopy(n.children, pivot+1, chr, 1, rest)
+          val chl = Arrays.copyOf(n.children, PIVOT+1)
+          chl(PIVOT) = update
+          val chr = new Array[Node](REST+1)
+          System.arraycopy(n.children, PIVOT+1, chr, 1, REST)
           chr(0) = ch
           ins.left = new ParentNode(chl, ksl, vsl)
           ins.right = new ParentNode(chr, ksr, vsr)
@@ -318,23 +318,24 @@ object ThreeArrayBTree {
       }
     } else {
       //println(s"  splitAndInsert $n, $k -> $v \\ $ch, pos=$pos")
-      val rpos = pos-pivot-1
-      val ksl = Arrays.copyOf(n.ks, pivot)
-      val vsl = Arrays.copyOf(n.vs, pivot)
-      val ksr, vsr = new Array[AnyRef](rest)
-      System.arraycopy(n.ks, pivot+1, ksr, 0, rpos)
-      System.arraycopy(n.vs, pivot+1, vsr, 0, rpos)
-      System.arraycopy(n.ks, pos, ksr, rpos+1, rest-rpos-1)
-      System.arraycopy(n.vs, pos, vsr, rpos+1, rest-rpos-1)
+      val rpos = pos-PIVOT-1
+      val ksl = Arrays.copyOf(n.ks, PIVOT)
+      val vsl = Arrays.copyOf(n.vs, PIVOT)
+      val ksr = new Array[Int](REST)
+      val vsr = new Array[AnyRef](REST)
+      System.arraycopy(n.ks, PIVOT+1, ksr, 0, rpos)
+      System.arraycopy(n.vs, PIVOT+1, vsr, 0, rpos)
+      System.arraycopy(n.ks, pos, ksr, rpos+1, REST-rpos-1)
+      System.arraycopy(n.vs, pos, vsr, rpos+1, REST-rpos-1)
       ksr(rpos) = k
       vsr(rpos) = v
-      ins.k = n.ks(pivot)
-      ins.v = n.vs(pivot)
+      ins.k = n.ks(PIVOT)
+      ins.v = n.vs(PIVOT)
       n match {
         case n: ParentNode =>
-          val chl = Arrays.copyOf(n.children, pivot+1)
-          val chr = new Array[Node](rest+1)
-          System.arraycopy(n.children, pivot+1, chr, 0, rpos)
+          val chl = Arrays.copyOf(n.children, PIVOT+1)
+          val chr = new Array[Node](REST+1)
+          System.arraycopy(n.children, PIVOT+1, chr, 0, rpos)
           System.arraycopy(n.children, pos, chr, rpos+1, chr.length-rpos-1)
           chr(rpos) = update
           chr(rpos+1) = ch

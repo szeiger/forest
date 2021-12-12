@@ -4,7 +4,9 @@ import java.util.Arrays
 import scala.annotation.tailrec
 
 object CombinedArrayBTree {
-  val ORDER = 16 // maximum number of children per node
+  final val ORDER = 16 // maximum number of children per node
+  final val PIVOT = ORDER/2
+  final val PIVOT2 = PIVOT*2
 
   @inline def debug(s: => String): Unit = println(s)
 
@@ -68,7 +70,6 @@ object CombinedArrayBTree {
     protected[this] def childrenIterator: Iterator[Node] = chVs.iterator.grouped(2).map(_(0).asInstanceOf[Node])
 
     @inline final def child(i: Int): Node = chVs(2*i).asInstanceOf[Node]
-    @inline final def value(i: Int): AnyRef = chVs(2*i + 1)
 
     override def debugString(b: StringBuffer, prefix: String = "", indent: String = ""): Unit = {
       super.debugString(b, prefix, indent)
@@ -120,11 +121,11 @@ object CombinedArrayBTree {
     n match {
       case n: ParentNode =>
         while(i < n.width) {
-          foreach(n.child(i), f)
-          f((n.ks(i).asInstanceOf[K], n.value(i).asInstanceOf[V]))
+          foreach(n.chVs(i*2).asInstanceOf[Node], f)
+          f((n.ks(i).asInstanceOf[K], n.chVs(i*2+1).asInstanceOf[V]))
           i += 1
         }
-        foreach(n.child(i), f)
+        foreach(n.chVs(i*2).asInstanceOf[Node], f)
       case n: LeafNode =>
         while(i < n.width) {
           f((n.ks(i).asInstanceOf[K], n.vs(i).asInstanceOf[V]))
@@ -167,7 +168,7 @@ object CombinedArrayBTree {
       val i = findIn(n, k)
       n match {
         case n: ParentNode =>
-          if(i >= 0) Some(n.value(i).asInstanceOf[V]) else getIn(n.child(-1-i))
+          if(i >= 0) Some(n.chVs(i*2+1).asInstanceOf[V]) else getIn(n.chVs((-1-i)*2).asInstanceOf[Node])
         case n: LeafNode =>
           if(i >= 0) Some(n.vs(i).asInstanceOf[V]) else None
       }
@@ -199,7 +200,7 @@ object CombinedArrayBTree {
       val pos = -1-i
       n match {
         case n: ParentNode =>
-          insertBottom(n.child(pos), k, v, ord, ins)
+          insertBottom(n.chVs(pos*2).asInstanceOf[Node], k, v, ord, ins)
           val ch2 = ins.left
           val k2 = ins.k
           val v2 = ins.v
@@ -263,11 +264,12 @@ object CombinedArrayBTree {
     ks2(pos) = k
     n match {
       case n: ParentNode =>
+        val pos2 = pos*2
         val chVs2 = Arrays.copyOf(n.chVs, n.chVs.length+2)
-        System.arraycopy(chVs2, pos*2+1, chVs2, pos*2+3, chVs2.length-pos*2-3)
-        chVs2(pos*2) = update
-        chVs2(pos*2+1) = v
-        chVs2(pos*2+2) = ch
+        System.arraycopy(chVs2, pos2+1, chVs2, pos2+3, chVs2.length-pos2-3)
+        chVs2(pos2) = update
+        chVs2(pos2+1) = v
+        chVs2(pos2+2) = ch
         new ParentNode(chVs2, ks2)
       case n: LeafNode =>
         val vs2 = Arrays.copyOf(n.vs, nw+1)
@@ -282,86 +284,89 @@ object CombinedArrayBTree {
    *  and return the new node, parent k/v and Node to the right */
   private[forest] def splitAndInsert(n: Node, k: AnyRef, v: AnyRef, ch: Node, pos: Int, update: Node, ins: Inserter): Unit = {
     //println(s"splitAndInsert(n=$n, k=$k, v=$v, ch=$ch, pos=$pos, update=$update, ins=$ins)")
-    val total = n.width+1
-    val pivot = total/2
-    val rest = total-pivot-1
-    //println(s"total=$total, pivot=$pivot, rest=$rest")
-    if(pos < pivot) {
-      val ksl = new Array[AnyRef](pivot)
+    val rest = ORDER-PIVOT-1
+    //println(s"ORDER=$ORDER, PIVOT=$PIVOT, rest=$rest")
+    if(pos < PIVOT) {
+      val ksl = new Array[AnyRef](PIVOT)
       System.arraycopy(n.ks, 0, ksl, 0, pos)
-      System.arraycopy(n.ks, pos, ksl, pos+1, pivot-pos-1)
+      System.arraycopy(n.ks, pos, ksl, pos+1, PIVOT-pos-1)
       ksl(pos) = k
-      val ksr = Arrays.copyOfRange(n.ks, pivot, n.ks.length)
-      ins.k = n.ks(pivot-1)
+      val ksr = Arrays.copyOfRange(n.ks, PIVOT, n.ks.length)
+      ins.k = n.ks(PIVOT-1)
       n match {
         case n: ParentNode =>
-          val chVsl = new Array[AnyRef](pivot*2+1)
-          System.arraycopy(n.chVs, 0, chVsl, 0, pos*2)
-          System.arraycopy(n.chVs, pos*2, chVsl, pos*2+2, chVsl.length-pos*2-2)
-          chVsl(pos*2) = update
-          chVsl(pos*2+1) = v
-          chVsl(pos*2+2) = ch
-          val chVsr = Arrays.copyOfRange(n.chVs, pivot*2, n.chVs.length)
-          ins.v = n.value(pivot-1)
+          val pos2 = pos*2
+          val chVsl = new Array[AnyRef](PIVOT2+1)
+          System.arraycopy(n.chVs, 0, chVsl, 0, pos2)
+          System.arraycopy(n.chVs, pos2, chVsl, pos2+2, chVsl.length-pos2-2)
+          chVsl(pos2) = update
+          chVsl(pos2+1) = v
+          chVsl(pos2+2) = ch
+          val chVsr = Arrays.copyOfRange(n.chVs, PIVOT2, n.chVs.length)
+          ins.v = n.chVs(PIVOT2-1)
           ins.left = new ParentNode(chVsl, ksl)
           ins.right = new ParentNode(chVsr, ksr)
         case n: LeafNode =>
-          val vsl = new Array[AnyRef](pivot)
+          val vsl = new Array[AnyRef](PIVOT)
           System.arraycopy(n.vs, 0, vsl, 0, pos)
-          System.arraycopy(n.vs, pos, vsl, pos+1, pivot-pos-1)
+          System.arraycopy(n.vs, pos, vsl, pos+1, PIVOT-pos-1)
           vsl(pos) = v
-          val vsr = Arrays.copyOfRange(n.vs, pivot, n.vs.length)
-          ins.v = n.vs(pivot-1)
+          val vsr = Arrays.copyOfRange(n.vs, PIVOT, n.vs.length)
+          ins.v = n.vs(PIVOT-1)
           ins.left = new LeafNode(ksl, vsl)
           ins.right = new LeafNode(ksr, vsr)
       }
-    } else if(pos == pivot) {
-      val ksl = Arrays.copyOf(n.ks, pivot)
-      val ksr = Arrays.copyOfRange(n.ks, pivot, n.ks.length)
+    } else if(pos == PIVOT) {
+      val ksl = Arrays.copyOf(n.ks, PIVOT)
+      val ksr = Arrays.copyOfRange(n.ks, PIVOT, n.ks.length)
       ins.k = k
       ins.v = v
       n match {
         case n: ParentNode =>
-          val chVsl = Arrays.copyOf(n.chVs, pivot*2+1)
-          chVsl(pivot*2) = update
-          val chVsr = new Array[AnyRef](rest*2+1)
-          System.arraycopy(n.chVs, pivot*2+1, chVsr, 1, rest*2)
+          val rest2 = rest*2
+          val chVsl = Arrays.copyOf(n.chVs, PIVOT2+1)
+          chVsl(PIVOT2) = update
+          val chVsr = new Array[AnyRef](rest2+1)
+          System.arraycopy(n.chVs, PIVOT2+1, chVsr, 1, rest2)
           chVsr(0) = ch
           ins.left = new ParentNode(chVsl, ksl)
           ins.right = new ParentNode(chVsr, ksr)
         case n: LeafNode =>
-          val vsl = Arrays.copyOf(n.vs, pivot)
-          val vsr = Arrays.copyOfRange(n.vs, pivot, n.vs.length)
+          val vsl = Arrays.copyOf(n.vs, PIVOT)
+          val vsr = Arrays.copyOfRange(n.vs, PIVOT, n.vs.length)
           ins.left = new LeafNode(ksl, vsl)
           ins.right = new LeafNode(ksr, vsr)
       }
     } else {
-      val rpos = pos-pivot-1
-      val ksl = Arrays.copyOf(n.ks, pivot)
+      val rpos = pos-PIVOT-1
+      val ksl = Arrays.copyOf(n.ks, PIVOT)
       val ksr = new Array[AnyRef](rest)
-      System.arraycopy(n.ks, pivot+1, ksr, 0, rpos)
+      System.arraycopy(n.ks, PIVOT+1, ksr, 0, rpos)
       System.arraycopy(n.ks, pos, ksr, rpos+1, rest-rpos-1)
       ksr(rpos) = k
-      ins.k = n.ks(pivot)
+      ins.k = n.ks(PIVOT)
       n match {
         case n: ParentNode =>
-          val chVsl = Arrays.copyOf(n.chVs, pivot*2+1)
-          val chVsr = new Array[AnyRef](rest*2+1)
-          System.arraycopy(n.chVs, pivot*2+2, chVsr, 0, rpos*2)
-          chVsr(rpos*2) = update
-          chVsr(rpos*2+1) = v
-          chVsr(rpos*2+2) = ch
-          System.arraycopy(n.chVs, pos*2+1, chVsr, rpos*2+3, chVsr.length-rpos*2-3)
-          ins.v = n.chVs(pivot*2+1)
+          val pos2 = pos*2
+          val rest2 = rest*2
+          val rpos2 = rpos*2
+          val chVsl = Arrays.copyOf(n.chVs, PIVOT2+1)
+          val chVsr = new Array[AnyRef](rest2+1)
+          System.arraycopy(n.chVs, PIVOT2+2, chVsr, 0, rpos2)
+          chVsr(rpos2) = update
+          chVsr(rpos2+1) = v
+          chVsr(rpos2+2) = ch
+          System.arraycopy(n.chVs, pos2+1, chVsr, rpos2+3, chVsr.length-rpos2-3)
+          ins.v = n.chVs(PIVOT2+1)
           ins.left = new ParentNode(chVsl, ksl)
           ins.right = new ParentNode(chVsr, ksr)
         case n: LeafNode =>
-          val vsl = Arrays.copyOf(n.vs, pivot)
+          val vsl = Arrays.copyOf(n.vs, PIVOT)
           val vsr = new Array[AnyRef](rest)
-          System.arraycopy(n.vs, pivot+1, vsr, 0, rpos)
+          System.arraycopy(n.vs, PIVOT+1, vsr, 0, rpos)
           System.arraycopy(n.vs, pos, vsr, rpos+1, rest-rpos-1)
           vsr(rpos) = v
-          ins.v = n.vs(pivot)
+          ins.v = n.vs(PIVOT)
           ins.left = new LeafNode(ksl, vsl)
           ins.right = new LeafNode(ksr, vsr)
       }
